@@ -1,0 +1,166 @@
+---
+title: 'BookBaskets'
+author: "Esther"
+date: "April 5, 2017"
+output: html_document
+---
+
+
+# Questions
+
+The manager of Flourish and Blots book store is trying to arrange the book displays in order to increase sales. He has given me a large data set with 90,000+ historical sales transactions and ask me to provide the answers to his three questions: 
+
+1. What are the best selling titles? 
+2. What books to be included in book displays for book club readers? 
+3. What other books should be recommended in book display?
+
+In order to address the above issues, my approach is to use Apriori algorithm to perform analysis.
+What is Apriori algorithm? Apriori is an algorithm will give suggestion base on frequent books items already in the shopping cart. 'arules' package in R is used to run Apriori algorithm.
+
+
+# Description of Transaction File
+
+The Dataset is in "single" format with each column separated by a tab. The column headers are userid and title.Duplication entries for the same userid and titles will be removed from the file. 
+
+```{r}
+options(scipen=999)
+setwd("C:/Users/Esther/Documents/1_courses/2_BIA_6301_HW/repo_wrk/script")
+library(arules) 
+bookbaskets <- read.transactions("C:/Users/Esther/Documents/1_courses/2_BIA_6301_HW/repo_wrk/data/bookdata.tsv.gz", format="single",  # Note: 2 
+                                 sep="\t",                    	# Note: 3 
+                                 cols=c("userid", "title"),    	# Note: 4 
+                                 rm.duplicates=T)             	# Note: 5
+```
+# Exploratory Data Analysis
+
+Five Most frequent book items are:
+
+  1. Wild Animus 
+  2. The Lovely Bones  
+  3. She's Come Undone 
+  4. The Da Vinci Code 
+  5. Harry Potter and the Sorcerer's Stone
+
+Statistical data shows Number of books purchased per transaction(s), for example, 52,186 transactions has one book purchased. 10,804 transactions has two books purchased and etc. 
+
+Minimum book purchase is 1, mean is 11 and maximum  book purchased is 10,250.
+      
+```{r}
+summary(bookbaskets)
+```
+ 
+# Terms Definition
+
+* Support is an indication of how frequently the item  appears in the dataset.
+* Relative Support of an item  measures how frequently the item  occurs in the data.
+* Absolute support measures the count occurrences of item.
+* Confidence is an indication of how often the rule has been found to be correct
+* Lift measures how much more likely one item is purchased, given that another item has been purchased. A large lift value reflects a true connection between the items.  
+* minlen is the minimum number of item
+* maxlen is the maximum number of items
+
+
+# Further Exploratory Data Analysis
+ 
+Next step is to examine a particular items in historical transactions. I look at the first five transactions to see what books readers are interested in. 
+
+```{r}
+inspect(bookbaskets[1:5])               #Examine the first five transactions
+
+bookFreq <- itemFrequency(bookbaskets)  #Calculate relative support for each book title
+bookFreq[1:5]
+
+bookCount <- itemFrequency(bookbaskets, type="absolute")  # get abosulte book count  for each title
+bookCount[1:5]
+```
+I will examine transactions that has more than one book purchased for analysis
+
+```{r}
+bookbaskets_t <- as(bookbaskets,"transactions")
+counts <- itemFrequency(bookbaskets_t)       # item frequency count by book title
+bookbaskets_t                                # transaction = 92108 trans(row), 220447 items (columns)
+
+basketSizes <- size(bookbaskets)             # bookbasket size 
+
+bookbasket_use<-bookbaskets[basketSizes>1]   # Only keep transactions with more than one book purchased. 
+bookbasket_use
+
+```
+# Best-Selling Titles
+
+The Top 25 Best Selling titles can be visualized from the following histogram. Best selling titles are ranked by relative support.
+The Top 3 best selling tiles are Wild Animus, The Lovely Bones: A Novel and She's Come Undone.
+From the best selling titles, four books are listed in Oprah's Books Club, they are: She's Come undone, The Pilot's Wife: A Novel, House of Sand and Fog, and White Oleander: A Novel. 
+
+[OprahBookClub]("https://static.oprah.com/images/o2/201608/201608-obc-complete-list-01a.pdf")
+
+
+```{r}
+library(arulesViz)
+itemFrequencyPlot(bookbaskets, topN= 25, main="Top 25 Best-Selling Titles")   # top 25 best selling titles
+```
+
+# Finding Relationship between Book Titles
+
+In order to find out what books to be displayed for book club readers, I will set rules using Apriori algorithm. I must define parameters for support, confidence, minlen and maxlen. current set up values are: support = 0.0005, confidence=0.5, minlen = 2 and maxlen = 10
+
+Using the above parameters, 5191 rules are created. 
+
+For rule [6], lift is 638 implies that readers who buy 'The Wide Window' are 638 times more likely to buy 'The Reptile Room'
+
+```{r}
+bookrules <- apriori(bookbaskets, parameter=list(supp=.0005,confidence=.5, minlen=2, maxlen = 10))   
+inspect(bookrules[1:6]) 
+```
+# Evaluate Model Performance
+
+Out of 5,000+ rules, 198 rules are created for 2 items, 2893 rules were created for 3 items, and etc. 
+Minimum number of books purchase is 2, mean is 3 and maximum number of books purchased is 7.
+
+```{r}
+summary(bookrules) 
+
+##str(bookrules)
+bookrules_sort <- sort(bookrules, by=c("lift"))     ## sort data by lift in descending order 
+bookrules_df <-  as(bookrules_sort, "data.frame")   ## save bookrules into data frame
+
+```
+# Books Display for Book Club Readers
+
+After reviewing the top 25 best selling titles, 'House of Sands and Fog', 'She's come Undone, 'White Oleander: A Novel' and 'The pilot's Wife: A Novel' are found in Oprah's Book Club,  I then inspect the first 30 rules base on the rules, lift is ranged from 97 to 150 for each book. I will suggest the following books to be displayed for book club readers:
+
+* Jewel [5]
+* Midwives: A Novel [7]
+* Message in a Bottle [21]
+* The Notebook [27]
+
+```{r}
+oprah_list <- subset(bookrules, lhs %in% c("House of Sand and Fog","She's Come Undone","White Oleander : A Novel","The Pilot's Wife : A Novel"))
+oprah_list_sort <- sort(oprah_list, by = c("lift"))
+
+inspect(oprah_list_sort[1:30])
+
+```
+# Other Books Recommendations
+
+After excluding books in series and 'Wild Animus', I review a list of books from book rules and check books information from Amazon.com, I will recommend the following books for books display
+
+* The Girls' Guide to Hunting and Fishing by Melissa Bank 
+* The Red Tent by Anita Diamant
+* She's Come Undone by Wally Lamb 
+
+'The Girls' Guide to Hunting and Fishing' has dominated in bestseller lists. 'The Red Tent' is one of the best seller in Historical Middle Eastern Fiction, and New York Times Best Seller.  Readers who purchase 'The Girls' Guide to Hunting and Fishing' and 'The Red Tent' are 54 time more likely to buy 'She's Come Undone'.
+
+```{r}
+bookothers_df <- bookrules_df[!grepl("Wild Animus", bookrules_df$rules),]
+```
+# Other Books Recommendation Generated from Apriori Rule
+[TheRedTent](https://images-na.ssl-images-amazon.com/images/I/51W%2BVOJnYhL._SX331_BO1,204,203,200_.jpg)
+[ShesComeUndone](https://images-na.ssl-images-amazon.com/images/I/41I1sbIScOL._SX296_BO1,204,203,200_.jpg)
+
+```{r}
+sugg_list <- subset(bookrules,lhs %in% c("The Girls' Guide to Hunting and Fishing", "The Red Tent") & rhs %in% c("She's Come Undone") & lift > 54 & lift < 55)   
+inspect(sugg_list)
+```
+``
+```
