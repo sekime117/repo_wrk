@@ -1,0 +1,456 @@
+---
+title: "Term Deposit"
+author: "Esther"
+date: "April 20, 2017"
+output: html_document
+
+---
+# Statement of Business Problem
+
+Hometown Bank has collected its term deposit subscription data from marketing campaigns. 
+The management team would like to know how to improve the number of term deposits and what are the key factors affecting term deposit subscribers.
+
+The bank's business goal is to predict if a client will subscribe the term deposit through marketing campaign, and requested me to create at least three predictive models that can successfully describe the main characteristic of a successful campaign.
+
+I have done some data analysis, and plan to create 'Decision Trees', 'Random Forest' and 'Bagging'  models to help Hometown Bank solving their problems:
+
+
+# Description of Transaction File
+
+The full dataset has 45K rows with 17 variables each. the bank is interested in understanding the column Y which refers whether the client has subscribed a term deposit. It is a factor with two values: “yes” or “no”.
+
+Field descriptions will be explaining in 'Terms Definition' section.
+```{r}
+options(scipen = 999)
+getwd()
+setwd("C:/Users/Esther/Documents/1_courses/2_BIA_6301_HW/repo_wrk/script")
+bank_in <- read.csv("C:/Users/Esther/Documents/1_courses/2_BIA_6301_HW/repo_wrk/data/bank-full.csv")
+
+#str(bank_in)
+
+```
+# Terms Definition
+
+
+* Duration is the last contact duration in second.
+* Poutcome is outcome of the previously marketing campaign, it has status of success, failure, unknown and other.
+* confusionMatrix table is also called error matrix table, it is a  cross-tabulations with two dimensions ("actual" and "predicted") values.This table is for predictive analysis. 
+* Month is the last contact month.
+* Day is the contact day of the month.
+* createDataPartition is a series of test/training data splitting method from 'Caret' package.
+* Complexity Algorithm (CP) is a method to prune the decision tree and cut off the least important splits.
+* Performance function is an algorithm to measure of performance from the prediction object.
+* Predictd function: is a function to obtain predictions from a fitted generalized linear model object.
+* Pruning a decision tree is a process in reducing the size of the tree, removing unimportant branches.
+* rpart is a function for recursive partitioning in decision tree.
+* randomForest is an assembling learning method for classification regression.
+* sensitivity shows how well the deposit subscribers are correctly predicted. 
+* specificity shows how well the non-deposit subscribers are correctly predicted.
+* Training dataset: 80% of the raw data.
+* Testing dataset:  20% of the raw data.
+
+
+#  DATA PREPARATION
+
+'nrow' will get the total row count from the table. A formula has created to assign 80% of the raw data to training dataset and 20% of the data to testing dataset.
+
+```{r}
+bank <- bank_in[, c(17,1:16)]                        # move term deposit subscriber (output Y) to the 1st column
+maxrow = nrow(bank)                                  # Maximum number of rows from input file
+train_set = round( maxrow*(.8) )                     # 80% for training dataset, 20% for test dataset
+ 
+set.seed(9850)
+bank_rand  <- bank[order(runif(maxrow)),]            # generate random ids for each row
+bank_train <- bank_rand[1:train_set,]                # 80% for training set
+bank_test  <- bank_rand[(train_set+1):maxrow,]       # 20% fro row set
+
+#dim(bank_train)                                      # validate row count
+#dim(bank_test)   
+
+table(bank_train$y..category)                  
+prop.table( table(bank_train$y..category))           # validate fraction data in training set
+
+table(bank_test$y..category)
+prop.table( table(bank_test$y..category))        # validate fraction data in test set
+``` 
+
+# MODEL 1: DECISION TREE
+Decision Tree is a classification model, it is using the recursive partitioning algorithm.
+It chooses the attribute that is most predictive of the target variable. Observations in the training data set are divided into groups of distinct values. 
+
+# Data Prepararation
+ 
+Create a decision tree model from training dataset using method 'class' for classification output, 'gini' is the splitting index using rpart function.
+Training data contains 36,169 rows of data
+ 
+The importance variables are 'Duration and 'Poutcome' from the statistical data below.
+
+```{r}
+library(rpart)
+library(rpart.plot)
+
+bank_rpart <- rpart(bank_train$y..category~., method="class", parms = list(split="gini"), data=bank_train)
+##summary(bank_rpart)
+```
+# Model 1: Visualization for the Decision Tree
+
+Two variables that predict deposit subscribers are:
+* Number of seconds in the last contact duration (Duration).
+* Previously marketing campaign status: success or failure (assuming unknown and others are failure).
+
+Common Occurences can be summarized as follows:
+* Number of seconds in the last contact duration (Duration).
+* A client will not subscribe the deposits when previous marketing campaign was NOT success regardless the length of duration.
+* Client will subscribe to the deposits when duration is greater than 827 seconds, and the previous marketing campaign was a success and duration is greater than 163 seconds.
+
+```{r}
+options(scipen=999)
+# Plot 1
+plot(bank_rpart, uniform=TRUE, main="Decision Tree for Term Deposit Subsrcriber")
+text(bank_rpart, use.n=TRUE, all=TRUE, cex=0.8)
+
+# Plot 2
+library(rpart.plot)
+rpart.plot(bank_rpart, type=1, extra=103, main="Term Deposit Subscribers")
+
+# Plot 3
+library(party)
+library(partykit)
+bank_rpart_party <- partykit::as.party.rpart(bank_rpart)
+
+bank_rpart_party  # statiscal data from partykit
+
+plot(bank_rpart_party, main= "Term Deposit Subscribers - Party Plot")
+```
+
+# MODEL 1: Evaluate Model Performance. CONFUSION MATRIX - BEFORE PRUNED
+
+Decision Tree Model Performance: 
+* Accuracy rate is 90%. 
+* sensitivity is 33%. 
+* specificity is 98%.
+
+The Accuracy rate of the decision tree model before pruned is 90%, it describes the non-term deposit (specificity is 98%) is predicted better than the term deposit subscribers (sensitivity is 33%).
+
+```{r}
+library(caret)
+
+actual <- bank_test$y..category
+predicted <- predict(bank_rpart, bank_test, type="class")
+results.matrix <- confusionMatrix(predicted, actual, positive="yes")
+print(results.matrix)
+
+```
+
+# MODEL 1: Using Complexity to prune the Decision Tree
+
+I plan to check if model performance will be improved by applying Complexity Algorithm (CP) to reduce the size of the tree and optimize the decision tree. I  selected the minimum CP value from the tree data partitioning.
+
+Run the prune tree (prune) function below.
+The statistical data below shows no improvement between before and after pruned.
+
+```{r}
+
+cptable<-printcp(bank_rpart)
+cptable
+set.cp.value<-cptable[which.min(cptable[,"xerror"]),"CP"]
+Pruned_bank_rpart <- prune(bank_rpart, cp=set.cp.value)
+
+rpart.plot(Pruned_bank_rpart, type=1, extra=103)
+
+```
+
+# Model 1: Visualize Cross Validation for Pruned Tree
+
+The graph below shows the number of tree splits, ranked by relative errors. Important variables are duration and poutcome.
+The x-axis shows the number of tree splits, values are between 0 and 1. Y values shows the relative error. The branch root error is calculated by root branch divided by number of records in training dataset. In this case, the root branch error is 4190/36169 = 0.11585, and the first relative error is 0, the 2nd relative error will be 1 - 0.11 = 0.89 and etc.
+```{r}
+cptable<-printcp(bank_rpart)
+plotcp(bank_rpart, minline=TRUE, col="red") 
+```
+
+# Model 1: Picking a tree size from Pruned Tree
+
+I look for the "elbow" in the CP plot, pick a tree size at the cp value where the "elbow" occurs, two CP values were selected 0.022 and 0.032.
+
+When CP value = 0.022, plot chart shows the tree has split duration seconds into 3 branches: 521, 827 and 165. 
+When CP value = 0.032, plot chart shows the tree has split duration seconds into 2 branches: 521, 827. The tree has cut off the unimportant branches.
+
+Factors causing deposit subscribers are:
+* The contact duration (Duration) 
+* The outcome of the previously marketing campaign (Pcoutcome)
+```{r}
+
+Pruned_bank_rpart <-prune(bank_rpart,cp=.032)
+Pruned_bank_rpart
+
+plot(Pruned_bank_rpart, uniform=TRUE, main="A Tree Size Selected from Pruned Tree")
+text(Pruned_bank_rpart, use.n=TRUE, all=TRUE, cex=.8)
+
+rpart.plot(Pruned_bank_rpart, type=1, extra=103, main="Classification Tree for Term Deposit Subscriber")
+
+Pruned_bank_party<-as.party(Pruned_bank_rpart)
+plot(Pruned_bank_party, main="Tree with CP value = .032")
+```
+
+# MODEL 1b:EVALUATE MODEL PERFORMANCE. CONFUSION MATRIX - AFTER PRUNED with CP Algorithm
+
+After using Complexity Algorithm to improve the tree performance, the performance of the new model does not 
+show any improvment. 
+
+Our decision tree model does a better job classifying the non-term deposit than the term deposit subscribers
+
+Comparison of Accuracy rate, sensitivity and specificity are as follows:
+
+AFter pruned with CP:
+Accuracy rate  is 89%. 
+sensitivity    is 33% 
+specificity    is 97% 
+
+Before Pruned:
+Accuracy rate  is 90%. 
+sensitivity    is 33% 
+specificity    is 98% 
+
+```{r}
+actual <- bank_test$y..category
+predicted <- predict(Pruned_bank_rpart, bank_test, type="class")
+results.matrix <- confusionMatrix(predicted, actual, positive="yes")
+print(results.matrix)
+
+```
+# MODEL 1b - Using the Caret Package Train and Validate Models
+
+Since the previous decision tree does not show any performance improvement, another approach is to simulate the previous process of estimating the true error, use 'createDataPartition' function for data splitting.
+
+Generate random ids
+create the training set using the following criteria:
+80% goes to training, result will not be in the list, one partition to be created
+20% goes to test
+
+Validate record count and number of variables from each train and test tables
+
+```{r}
+set.seed(9850)
+trainIndex <- createDataPartition(bank$y..category, p = .8,list = FALSE,times = 1)  # 80% goes to training
+bank_train_caret <- bank[ trainIndex,]
+bank_test_caret <- bank[ -trainIndex,]
+
+dim(bank_train_caret)
+dim(bank_test_caret)
+```
+
+# Model 1b: Recursive Partitioning using Caret training Dataset
+
+Variable Importance created by recursive data splitting are: duration and poutcome
+
+```{r}
+bank_rpart_caret <- rpart(y..category~., method="class", parms = list(split="gini"), data=bank_train_caret)
+#summary(bank_rpart_caret)
+```
+# Model 1b: Evaluate MODEL PERFORMANCE. Consusion Matrix on caret Package for Performance Improvement
+
+'caret' model does not show any performance improvment. model performance comparison are as follows:
+
+Decision Tree Performance Comparison
+'Caret' Package': Accuracy rate is 90%, Sensitivity is 31%, Specificity is 97%
+'Pruned with CP': Accuracy rate is 89%. sensitivity is 33%, specificity is 97% 
+'Before Pruned':  Accuracy rate is 90%. sensitivity is 33%, specificity is 98% 
+
+```{r}
+# Plot Graph 
+plot(bank_rpart_caret, uniform=TRUE, main="Classification Tree for Term Deposit Subscriber")
+text(bank_rpart_caret, use.n=TRUE, all=TRUE, cex=0.8)
+
+rpart.plot(bank_rpart_caret, type=1, extra=101)
+
+Pruned_rpart_caret_party<-as.party(bank_rpart_caret)
+plot(Pruned_rpart_caret_party)
+
+# Confusion Matrix
+actual <- bank_test_caret$y..category
+predicted <- predict(bank_rpart_caret, bank_test_caret, type="class")
+results.matrix <- confusionMatrix(predicted, actual, positive="yes")
+print(results.matrix)
+
+```
+
+# MODEL 2 - Random Forest 
+
+My second approach is to use Random Forest algorithm to implement the model. Why Random Forest algorithm? 
+
+Random forest algorithm can handle extremely large datasets. it is an ensemble method combine multiple algorithms to obtain better predictive performance. The algorithm is using a subset of the predictors at each split. The node splits are not dominated by strong predictors, it also gives less strong predictors more chances to be used. 
+```{r}
+library(randomForest)
+```
+In ‘randomForest' function, I have set up Term Deposit Subscriber as the output (Y), number of predictors(mstr) is set to 3 for each split, maximum number of trees (mtree) is 500, omit not applicable data, extract important predictors.
+
+The above information will describe the importance of variables to term deposit subscribers. From the diagram below,  the top 5 variables have the most impact to term deposit, they are duration, campaign month, day, housing and previous campaign(poutcome)
+
+The last contact (Duration) is a very significant predictor. This variable is also ranked as top one important variable in decision tree model.
+
+```{r}
+set.seed(9850)
+bank_RForest <- randomForest(y..category~.,data=bank_train_caret, mtry=3, ntree=500,na.action = na.omit, importance=TRUE)  
+
+importance(bank_RForest, type = 1)     # important variables measures
+varImpPlot(bank_RForest, type= 1,main=("Variable Importance Rank by Predictors"))
+
+```
+
+# Model 2: Random Forest: Making Predictions
+
+Next step is to evaluate Random Forest Performance using Confusion Matrix and Statistics
+
+The Model performance has improved sensitivity by about 14% when comparing to decision tree, that means Random Forest model explains term deposit (True Positive) subscribers better than non-term deposit subscribers.
+
+Accuracy and Specificity remain the same, no improvement in the model
+
+Random Forest Model performance:
+Accuracy    : 91%
+Sensitivity : 47%
+Specificity : 97%
+```{r}
+library(caret)
+actual <- bank_test_caret$y..category 
+bank_predicted <- predict(bank_RForest, newdata=bank_test_caret, type="class") 
+bank_results_matrix_rf <- confusionMatrix(bank_predicted, actual, positive ="yes")
+print(bank_results_matrix_rf)
+```
+
+# MODEL 2: Random Forest Performance Evaluation Metric using ROC Curve
+
+After evaluating model performance from confusion Matrix, I plan to investigate deposit/non-deposit (sensitivity/Specificity) relationship from ROC curve. 
+
+The ROC (receiver operating characteristics) curve displays the true positive rate (sensitivity) against the false positive rate (1-specificity), specificity values are between 0 and 1.
+The closer the curve follows the left-hand border and then the top left border of the ROC space, the more accurate the model
+```{r}
+library(ROCR)
+```
+# ROC Data Preparation:
+
+Using 'predict' function below, I will implement the probability for each term deposit subscriber, each row will include rowid,  'no' for non-deposit, yes' for deposit.
+
+For example: 
+* ID  4:  100% of clients will not subsscribe term deposit.
+* ID 24: 99.4% of clients will not subsscribe term deposit, 0.6% of client  will subsscribe term deposit.
+```{r}
+bank_RForest_predict_prob <-predict(bank_RForest, type="prob", newdata=bank_test_caret)
+head(bank_RForest_predict_prob)
+```
+# Model 2: Using ROC Curve for cross-validation
+
+Next, I will extract clients who wants to subscribe term deposits (Yes) from predict probability table. Then, I setup parameter values in performance function,"tpr" for true positive rate and "fpr" for false positive rate. 
+
+ROC Performance Observation:
+
+* When non-deposit clients (specificity) increase gradually on x-axis up to around 65%, term deposit (sensitivity) is increasing vertically, that means before 65% non-deposit, the model is good for predicting term deposit client than non-term deposit clients.
+
+* After 65% on non-deposit classification (x-axis), term deposit subscriber (Y) line is moving to the right horizontally, almost parallel with x-axis. That means, after 65% on non-term deposit, the model is equally well predicting in both term deposit and non-term deposit clients.
+
+```{r}
+bank_pred = prediction(bank_RForest_predict_prob[,2],bank_test_caret$y..category) #use [,2] to pick the Yes class prob
+
+bank_RForest_perf = performance(bank_pred,"tpr","fpr") #true pos and false pos
+plot(bank_RForest_perf ,main="ROC Curve:  Y= Sensitivity(TP),  X=Specificity (FP)",col=2,lwd=2)
+abline(a=0,b=1,lwd=2,lty=2,col="gray")
+
+#unlist(bank_RForest_perf@y.values) #This is the AUC value (area under the ROC curve)
+```
+
+# MODEL 3: BAGGING MODEL 
+
+My last approach is to use Bagging algorithm. Bagging is an ensemble algorithm designed to improve the accuracy in prediction.It generates a number of training datasets by bootstrap sampling the original training data.These datasets are then used to generate a set of models using a single learning algorithm. 
+
+Bagging averages many trees so it reduces the variance of the instability of generating just one tree.  The tradeoff is you lose interpretability and the ability to see simple structure in a tree.
+
+```{r}
+library(randomForest)
+```
+# Model 3: Data Preparation and Model Performance
+
+In 'randomForest'algorihm’, I have setup term-deposit as output, number of predictors (mstr) is 16, training dataset, omit not applicable data, allow assess important variables. mstr=16 means all predictors should be considered at each split.
+
+Importance of predictors are generated using parameters above. Top 5 factors have the most impact to term deposit are: Duration, month, day, contact and age.
+
+Duration is a critical factor to predict term-deposit in all three models.  In order to measure how much mean decrease in accuracy of prediction without the critical variable, I excluded the variable and rerun the algorithm.
+
+The before and after excluding Duration, 'mean decrease in accuracy' are as follows:
+month has decreased by 10%, days as decreased by 10%, contact has increased by 14% and age has increased by 2%
+```{r}
+set.seed(8950) 
+bank_bag <- randomForest(y..category~., mtry=16, data=bank_train_caret, na.action=na.omit, importance=TRUE)
+
+# drop duration variable, duration is a critical factor to predict term deposit subscribers.
+bank_bag_r <- randomForest(y..category~
+                        bank_train_caret$age..number +
+                        bank_train_caret$job..category+
+                        bank_train_caret$marital..category+
+                        bank_train_caret$education..category+
+                        bank_train_caret$default..category+
+                        bank_train_caret$balance..number+
+                        bank_train_caret$housing..category+
+                        bank_train_caret$loan..category+
+                        bank_train_caret$contact..category+
+                        bank_train_caret$day..number+
+                        bank_train_caret$month..category+
+                        bank_train_caret$campaign..number+
+                        bank_train_caret$pdays..number+
+                        bank_train_caret$previous..number+
+                        bank_train_caret$poutcome..category, 
+                        mtry=15, data=bank_train_caret, na.action=na.omit, importance=TRUE)
+#print(bank_bag)
+#print(bank_bag_r)
+      
+importance(bank_bag, type=1)
+importance(bank_bag_r, type=1)
+```
+# Model 3: Bagging - Evaluating Model Performance
+
+Bagging model shows 91% accuracy, 5% improvement in predicting term deposit clients(Sensitivity) when comparing to Random Forest. No change in Accuracy, 1% decreased in predicting non-term deposits.
+
+We will look into recommendation section to justify which will be an efficient model to recommend to Hometown management team.
+
+Model 3: Bagging performance:
+Accuracy :   91%.
+Sensitivity  52%.
+Specificity: 96%.
+
+Model 2 (Random Forest) performance:
+Accuracy    : 91%.
+Sensitivity : 47%.
+Specificity : 97%.
+
+```{r}
+actual <- bank_test_caret$y..category
+bank_predicted <- predict(bank_bag, newdata=bank_test_caret, type="class") 
+bank_results.matrix.bag <- confusionMatrix(bank_predicted, actual, positive="yes") 
+print(bank_results.matrix.bag)
+```
+
+# Recommendations to Hometown Bank
+
+After evaluating model performance and data analysis, I have summarized the analysis outcomes and recommendation to  Hometown Bank management team.
+
+1. In Decision Tree model(s), accuracy of the model is 90%, the model is able to correctly predict term-deposits with sensitivity rate of 33%.
+* The top 2 factors causing non-term deposit subscribers are contact duration and the failure of marketing campaign.
+* Clients will not subscribe term deposits when campaign was not in success status regardless duration length
+* Client will subscribe term deposit when the previous marketing campaign was in success status and the contact duration is at least 2.7 minutes.
+
+2.	In Random Forest and Bagging Models, these models need all 16 variables to predict term deposits. Both models have better prediction in term deposits with sensitivity rate of 47% and 52% respectively. However, these models need more resources, overhead and more risk to predict term deposit. Thus, these models are not efficient for term-deposit marketing campaign.
+
+3.	According to historical data, about 50% of duration seconds are within 180 seconds, only 3% of the previous campaigns are in success status, 10% have failure status, about 82% are unknown and 10% for other status.
+
+My recommendations are:
+
+* Decision Tree model is a more efficient model to predict term deposits in the marketing campaign. This model needs only Contact duration and campaign status to predict 33% of term deposit
+* Suggest management team to investigate the ‘unknown’ value in campaign status (Poutcome) column. What cause 98% of the data has unknown status? was it because no values being entered? Can campaign status set as a mandatory column in the future so that value must enter, no blank accepted.
+* Encourage Hometown Bank to provide customers service training to bank staffs, improve communication skills, and improve client relationship during campaign. 
+* Provide products training, staffs need to spend at least 3 minutes to introduce term deposit to each client during marketing campaign.
+* Research nearby competitors and review term deposit products, Hometown Bank will offer a more attractive interest rate to attract new clients in marketing campaign. 
+* Promote no penalties for early withdraw in term deposits.
+* Give away free ‘Hometown Bank’ logo stuffs such as pens, t-shirt, freebies and etc.  during marketing campaign. Ensure each marketing campaign end with successful result.
+
+
+
+
