@@ -1,0 +1,358 @@
+---
+title: Study the effectiveness of Chemotherapy using Levamisole and Fluorouracil for
+  Stage C Colon Cancer
+author: "Esther"
+date: "April 26, 2017"
+output:
+  html_document: default
+---
+
+# Problem Statement:
+
+This project is to study the effectiveness of adjuvant therapy using Levamisole-Fluorouracil, and Levamisole alone on the treatment for patients with Stage C colon cancer.
+
+The effectiveness of adjuvant therapy for colon cancer is measured based on tumor recurrence time which is the survival rate.
+
+
+The outcomes of the survival analysis are Time and Event. Time is the day until event or censoring happens.  Event is recurrence of tumor (0 for censored, 1 for event). Event happens when a patient stay in the study and detect cancer recurrence; patients who leave the study or die without recurrene were censored.
+
+Our interest is to find out the survival rate for each adjuvant therapy: Levamisole alone, Levamisole-Fluorouracil  and Observation  (No Treatment).
+
+My approach is to use Kaplan-Meier and Cox Regression models for event history and survival data analysis. 
+
+
+# File Description and Data Prepartion
+
+The data is from one of the first successful trials of adjuvant chemotherapy for colon cancer. The dataset has two records per person, one for recurrence and one for death, our interest is in recurrence data with 929 observations. Outcomes are time duration and censoring status.
+
+Source of data: https://vincentarelbundock.github.io/Rdatasets/doc/survival/colon.html
+
+```{r read}
+options(scipen=999)
+getwd()
+setwd("C:/Users/Esther/Desktop/Final_Project/script")
+colon <- read.csv("C:/Users/Esther/Desktop/Final_Project/data/colon.csv")
+colon <- colon[which(colon$etype == 1), ]   # Inluded recurrence data
+##colon$rx <- relevel(colon$rx, ref="Obs")
+
+```
+# Column Definitions:
+
+* adhere: adherence to nearby organs.
+* age: in years.
+* Differ: differentiation of tumor (1=well, 2=moderate, 3=poor).
+* etype: is the event type, it has two values, 1=recurrence, 2=dead.
+* extent: Extent of local spread (1=submucosa, 2=muscle, 3=serosa, 4=contiguous structures).
+* id: patient's identification
+* Node: number of lymph nodes with detectable cancer.
+* Node4: more than 4 positive lymph node.
+* obstruct: obstruction of colon by tumor.
+* perfor: perforation of colon.
+* rx: Treatment - Obs(ervation), Lev(amisole), Lev(amisole)+5-FU.
+* study: 1 for all patients.
+* surgery: time from surgery to registration (0=short, 1=long).
+* sex: 1=male, 0=female.
+* status: censoring status (Survival status)
+* time: days until event or censoring (survivor time)
+
+# Term Definitions:
+
+* Cox Regression Modelis a common technique used for comparing the survival time among treatment levels. 
+* Chemotherapy is a treatment for cancer that uses powerful drugs to destroy cancer cells. 
+* Censoring is when an event under analysis or investigation is missing or individual's survival time is incomplete
+* Fluorouracil: 5-FU
+* Hazard Rate is an estimate of the number of deaths per unit time divided by the average number of survivor
+rs computed at the interval midpoint
+* IQR (interquartile range) is also called the midspread or middle 50%. It is equal to the difference between 75th and 25th percentiles, or between upper and lower quartiles. IQR = Q3 −  Q1
+* Kaplan-Meier Analysis (product limit estimator) is to estimate a population survival from a sample, it allows estimation of survival over time. The curve is by computing the fraction of surviving at each time.
+* Levamisole: Lex
+* likelihood ratio test is a statistical test used for comparing the goodness of fit of two models, one of which (the null model) is a special case of the other (the alternative model)
+* lymph nodes are small structures that are found throughout the body that make and store cells that fight infection.
+* LogRank test is ( a type of chi square test) used  to compare the survival distributions of two samples.
+* Nonparametric statistics refer to a statistical method wherein the data is not required to fit a normal distribution.It makes no assumptions about the probability distributions of the variables being assessed.
+* semiparametric 
+* serosa: a usually enclosing serous membrane
+* rx: Rx is prescription for medicine 
+* Right Censored is when an individual is lost to follow-up.
+* stage B, cancer may have stretched into the peritoneum - tissue that covers most of the organs in your abdomen.
+* Stage C: In Stage C1,cancers have spread to one to four lymph nodes. Stage C2 means tumors have spread to more than four lymph nodes.
+* Stratification means that data is split up into groups.
+* Time is defined as the time it takes for an event to occur.
+* waldtest is a generic function for comparisons of models via Wald tests. The default method compares the fitted model object object with the models passed in.
+
+
+# Data Analysis  
+
+Number of patients in each treament group:Lev: 310, Lev+5FU: 304 and Obs: 315.  
+
+Outcome: time and censor status
+convariates:
+
+Censor status has two values, one for recurrence event (status=1) and one for censored individuals (status=0)
+Censor Observation: A censored observation is one in which the time until the event of interest is not known because the individual withdrew from the study.
+
+This variable contains the length of time that an individual was observed. This may represent a recurrence time or a censor time.
+
+* Event Status Overview:
+In Lev treatment, 138  were censor out, 172 remains in the event.In Lev+5FU treatment, 185 were censor out, 119 reamisn in the event.  In observation (no treatment), 138 were censor out, 177 remains.
+Treatment by Gender
+Lev: 133 female, 155 male, Lev+5FU: 185 female, 119 male and Obs: 138 female, 117 male.
+
+```{r Data Analysis}
+ ## str(colon)                                                                                                                                
+table(colon$rx)  #number of patients in each treatment group.
+table(colon$rx, ifelse (colon$status==0, "Censour Out", "Number of Events" ) )
+table(colon$rx, ifelse (colon$node4==0, "No. of Nodes between 1 to 4", "No. of Nodes greater than 4" ) )
+table(colon$rx, ifelse(colon$sex== 0, "Female", "Male") )                         #Lev=310, Lev+5FU = 304 and obs= 315 
+   
+```
+# Kaplan-Meier Survival Analysis
+
+The Kaplan-Meier estimate is the simplest way of computing the survival over time.It is used to measure the fraction of subjects living for a certain amount of time after treatment. Kaplan-Meier method is a nonparametric estimator of the survival function; no assumption is made about the shape of the hazard function or how the covariates influence that shape. 
+
+The Kaplan-Meier procedures provides univariate descriptive survival data statistics that include the median survival time.  In addition, survival functions of more than one group can be compared.
+
+
+Loading Survival and Prodlim (Product Limit) packages for survival analysis. 
+
+We will create KM survival model and define outcome variables.
+Two outcome dependable variables are:
+* time = time recurrence.
+* event(status) = censoring Status.
+
+To create Kaplan-Meier survival Model, We will use ‘prodlim’ function to estimate the time recurrence and event of interest(censoring status) by using Rx as predictor.
+
+Hist(time, status) function will extract event history. There are 929 observations, 468 events with status equal to one, 461 patients were censored with status = 0. That means, 468 patients stay in the study were detected cancer recurrence and 461 patients were censored (compute the conditional probabilities at each time point when an event occurs ).
+
+‘prodlim’ function will use the event history to create a survival fit model (compute the product limit of those probabilities to estimate the survival rate at each point in time).
+
+* The statistical summary result of the product limit shows time, number of risk and count events and censored observations at specific times or in specified time intervals.
+The result has broken down into levamisole (Lev), levamisole+5-fluorouracil(Lev+5FU) and observation group. 
+There are 5 time intervals within each group, range from 8 days to 3329 days. Within the same time interval, the survival rate (surv) for lev+5FU is much higher than levamisole and observation groups. For example, time = 1551 day, the survival rate for Lev is 48%, Lev+5FU is 63% and 46% for observation.
+
+
+```{r Kaplan-Meier, message=FALSE}
+library(survival)
+library(prodlim)                           # Kaplan-Meier production limit
+options(scipen = 999)
+
+time <- colon$time                          # Define  time as first dependent variable 
+status <- colon$status                      # Define censoring status as second dependent variable
+
+km_rx <- prodlim( Hist(time,status)~rx,data=colon)  # create probalility for Rx treatment
+summary(km_rx)
+```
+# Kaplan Meier Survival Curve Analysis
+
+* what is Kaplan-meier Survival Curve? It is defined as the probability of surviving in a given length of time while considering time in many small intervals.
+
+From the survival curve below, free on recurrence rate for Lev+5FU adjuvant therapy is significantly higher than Lev and Observation patients. That means, the effect of Lev+5FU takes much more time for tumor to recurrence when comparing to others. 
+
+The survival curve for Lev and Observation groups are overlapping each other. Therefore, using levamisole for adjuvant therapy is like no treatment.  The effect of levamisole does not show any significant difference from observation group.
+
+  
+   	    Day  Lev+5FU	  Lev	  Obs
+          8	  99.70%	100%	 100%
+        435	     81%	 69%	  68%
+       1551	     63%	 48%	  46%
+       2316      60%	 43%    43%
+       3229      N/A	 43%    N/A
+
+
+304 patients using levamisole and 5-Fluorouracil (Lev+5FU) for adjuvant therapy, in the first 435 days (between year 1 and 2), 241 patients have survived with the survival rate of 81%.   In the cumulative of 1551 days (between year 4 and 5), 183 patients were survived with the rate was 63%, when comparing to levamisole alone chemotherapy, the survival rate was 69% and 48%, respectively.
+
+The logrank test p-value < .0001, logrank is used to compare the distributions of survival times of two samples, in our study the p-value is significant which is less than 5% at 95% confidence interval, that means the survival rate for Lev+5FU adjuvant therapy is significantly over observations group.
+
+```{r KM Survival Curve}
+plot( km_rx,
+     atrisk.labels=paste("Rx: ",c("Lev","Lev+5FU","Obs"),": "),
+     ylab=" Free of Recurrence (%)",
+     timeconverter="days2years",
+     legend.x="bottomleft",            # positition of legend
+     legend.cex=0.8,  
+     legend.title="Rx\n",  
+     logrank=TRUE)                     #show p-value <.0001
+```
+# Tabulate Result
+The following matrix displays the result of survival rate comparison within levamisole (Lev), levamisole and 5+fluorouracil (Lev+5FU) and observation groups. When time recurrence greater than 8 days, Lev+5FU shows significantly higher survival rate then Lev and Observation.
+
+Description of the tabulate table:
+‘Interval’ is the recurrence time interval
+‘No at Risk is the number of patients remain in the study. 
+‘No. of Events’ is the number of patients have detected cancer cell recurrence
+‘No. of Lost to follow-up’ is the number of patients censored from the study.
+
+Number of Survive = No. at Risk minus No. of Event
+Current survival probability: For each time interval, survival probability is calculated as the number of subjects surviving divided by the number of patients at risk.
+
+‘Survival Probability’ is the 'current survival rate' multiplying all the probability of survival rate at all time integral preceding that time. 
+For Example: for levamisole, time interval:  738.5--1103.8, current survival Rate = (170-16)/170 * 0.56 = 0.91*.56= (56%)
+Ci.95 is the confidence Interval, survival probability is the mean of lower interval and upper. For example, at time interval of 738.5 to 1103.5, Survival Probability = (45.1 + 56.3) / 2 = 50.7.
+
+
+```{r Publish, message=FALSE}
+library(Publish)      
+km_rx <- prodlim(Hist(time,status)~rx,data=colon)
+publish(km_rx,times=seq(8,3330,365.25),org=TRUE, cex=0.75)                 # Survival Tabulate Result by each treatment
+```
+
+# Cox proportional Hazard Regression Model
+
+Cox proportional hazards model is another modeling technique in survival analysis. Itis a method for investigating the effects of several variable upon the time a specified event takes to happen. 
+Cox is a semiparametric model, it makes no assumption about the hazard function shape, however, these models do assume that the covariates influence the hazard function shape among groups over course time.
+Cox uses one or more covariates to predict a status of event. These dependents are binary outcome. In cox, the regression coefficients represent relative hazards called hazard ratios.
+
+# Cox Regression Model Fit
+
+Relevel rx, reference observation as base group.
+
+Create Cox model using ‘coxph’ function. 
+Outcome variables are: 
+•	Time:  is either the event time or censoring time (day)
+•	Event: is a dummy variable (0 = censored, 1 = event)
+
+• Covariates includes: rx, sex, age, obstruct, perfor, adhere, nodes, differ, extent, surgery and node4
+
+• The most Significant variables are:
+rxLev+5FU, p-value=0.0000313 and node4, p-value= 0.0000241
+
+The interpretation of hazard ratio, exp(coef) , are as follows:
+
+* Levamisole+5FU, the hazard ratio is .60, that means lev+5FU is 40% less hazard than observation group. By using lev+5FU treatment, the tumor recurrence rate is reduced 40% at 95% Confidence Interval.
+* Levamisole – the hazard ratio is 0.97, that means levamisole is only 3% less hazard than observation, the reduction in the recurrence rate  is only 3% at 95% Confidence Interval.
+* Note4 – for each increase unit of invasion of number of lymph, the recurrence rate will increase by 180%.
+* Extent4 – hazard ratio is 3.3, that means when cancer cell has extended to contiguous structures, the recurrence rate is 230% more than submucosa.
+
+* Rsquare is 14% explains by variance of the model. 
+
+* Log likelihood Test (LRT) is testing whether adding certain variable to the existing model improves the model fit or not. Likelihood ratio test, Wald test and Score (logrank) test tests are using for testing Global Null Hypothesis Beta =0. The result have shown that the test statistics are in closed agreement so the null hypothesis could not be accepted.
+* The logrank of P=0 (less than .5) which is significant when comparing survival distributions of two samples, thus reject null hypothesis.
+
+```{r Cox}
+##library(coxphf)
+library(survival)
+options(scipen = 999)
+
+colon2 <- colon
+colon2$differ <- as.factor(colon2$differ)
+colon2$obstruct <- as.factor(colon2$obstruct)
+colon2$sex <- as.factor(colon2$sex)
+colon2$extent <- as.factor(colon2$extent)
+
+colon2$rx <- relevel(colon2$rx, ref = "Obs")   # relevel Rx:Observation as base group.
+time <- colon2$time
+status<- colon2$status
+table(colon2$rx)            # obs= 315, Lev= 310, lev+5FU = 304     
+# Multilple regression
+cox_fit <- coxph(Surv(time,status)~rx+sex+age+obstruct+perfor+adhere+nodes+differ+extent+surgery+node4
+                 ,data = colon2)
+summary(cox_fit)
+```
+
+# Predicting survival probabilities 
+
+Next, I created a training dataset to predict the survival rate for C2 and C1 patients with each adjuvant therapy.
+covariates includ rx and node4. This model will be used to predict the survival rate C1 and C2 patients who are under Lev and Lev+5FU adjuvant therapy.
+
+Newdata_test1: this data frame includes: rx, male and node4 = 1 (C2 patients)
+Newdata_test0: this data frame includes: rx, male and node4 = 0 (C1 patients)
+
+The following graphs show the survival probabilities for all three categories of “Lev, Lev+5FU and Observation” stage C1 and stage C2 patients:
+Graph 1 shows stage-C2 patients with invasion number of lymph 5 and more
+Graph 2 shows stage-C1 patients with invasion number of lymph nodes less than 5
+
+From observation of survival curve,  Lev+5FU consistently shows that it is more effective then Observation group. 
+
+```{r }
+# Stage C2 Patients where invasion number of lymph nodes > 4                  
+# Predictive Survival Probabilities 
+library(pec)
+
+par(mfrow=c(1,2))
+cox_train <- coxph(Surv(time,status)~rx+node4,data=colon2)            #actual model: rx, stage c2  and male   
+summary(cox_train)
+newdata_test1 <- data.frame(rx=c("Obs","Lev","Lev+5FU"),node4=1)  # Stage C2
+# Predicting Survival Probability
+
+pred_test_1 <- predictSurvProb(cox_train, newdata=newdata_test1, times=sort(unique(colon2$time)))
+pred_test_1_t <- t(pred_test_1)  # transpose dataframe
+
+plot_pred1 <- plotPredictSurvProb( 
+                  cox_train, 
+                  sort(unique(colon2$time)),
+                  newdata=newdata_test1,
+                  percent = TRUE,
+                  lwd = 5,
+                  col=c("black","green","red"),
+                  legend.cex = 0.8,
+                  legend.title="Rx",
+                  legend.legend=c("Obs","Lev","Lev+5FU"))
+mtext("Predict Survival Rate for Stage C2 Patients \n",line=0.5, cex=.9)
+
+# Stage C2 Patients where invasion number of lymph nodes <-= 4
+newdata_test0 <- data.frame(rx=c("Obs","Lev","Lev+5FU"), node4=0)  #3 COX - Rx+Node4 = 0
+pred_test_0 <- predictSurvProb(cox_train, newdata=newdata_test1, times=sort(unique(colon2$time)))
+pred_test_0_t <- t(pred_test_0)  # transpose table
+
+plot_pred0 <- plotPredictSurvProb(
+                  cox_train,
+                  sort(unique(colon2$time)),
+                  newdata=newdata_test0,
+                  percent = TRUE,
+                  lwd = 5,
+                  col=c("black","green","red"),
+                  legend.cex = 0.8,
+                  legend.title="Rx",
+                  legend.legend=c("Obs","Lev","Lev+5FU"))
+mtext("Predict survival rate for stage C1 Patients \n" ,line=0.5, cex=.9)
+```
+# Conlcusion 
+
+* Levamisole and fluorouracil consistently shows that it is an effective adjuvant therapy  from Kaplan-Meier and Cox Regression models.
+* Adjuvant therapy with Levamisole and fluorouracil (Lev+5FU) should be a standard treatment for stage C colon cancer.
+
+
+# Recommendation to Patients with Colon Cancers
+
+* Patients with Stage C, consult physician about Levamisole-Fluorouracil for adjuvant therapy. Treatment with levamisole-fluorouracil significant reduces the overall death rate at least during the first 31/2 year after surgery
+* Remove tumors at early stage before cancer cells spreading to more lymph nodes 
+* Risk factors for colon cancers are such as smoking, alcohol and lack of physical activities.  Suggest patients stop smoking, reduce alcohol intake and exercise regularly to reduce risk of cancer
+
+
+
+
+```{r}
+
+library(pec)
+
+# Estimate Kaplan-Meier Survival curve
+plot( km_rx,
+     confint=FALSE,
+     atrisk.labels=paste("Rx: ",c("Lev","Lev+5FU","Obs"),": "),
+     lwd=2,
+     ylab=" Free of Recurrence (%)",
+     legend.x="bottomleft",            
+     legend.cex=0.8,  
+     legend.title="Rx\n",  
+     logrank=TRUE)    
+ mtext("Kaplan Model Survival Curve",line=0.5,cex=0.9)
+
+fit.cox <- coxph(Surv(time, status) ~ rx, data=colon2) # Cox model 
+plotPredictSurvProb(fit.cox,
+                  sort(unique(colon2$time)),
+                  newdata = data.frame(rx=c("Obs","Lev","Lev+5FU")), 
+                  percent = TRUE,
+                  lwd = 2,
+                  ylab=" Free of Recurrence (%)",
+                  col=c("black","green","red"),
+                  legend.cex = 0.8,
+                  legend.x="bottomleft",  
+                  legend.title="Rx",
+                  legend.legend=c("Obs","Lev","Lev+5FU"))
+mtext("Cox Model Survival Curve",line=0.5,cex=0.9)
+```
+
+
+ 
+
+
