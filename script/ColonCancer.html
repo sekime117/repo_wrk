@@ -138,9 +138,9 @@ $(document).ready(function () {
 <p>Source of data: <a href="https://vincentarelbundock.github.io/Rdatasets/doc/survival/colon.html" class="uri">https://vincentarelbundock.github.io/Rdatasets/doc/survival/colon.html</a></p>
 <pre class="r"><code>options(scipen=999)
 getwd()</code></pre>
-<pre><code>## [1] &quot;C:/Users/Esther/Desktop/Final_Project/script&quot;</code></pre>
-<pre class="r"><code>setwd(&quot;C:/Users/Esther/Desktop/Final_Project/script&quot;)
-colon &lt;- read.csv(&quot;C:/Users/Esther/Desktop/Final_Project/data/colon.csv&quot;)
+<pre><code>## [1] &quot;C:/Users/Esther/Documents/1_courses/2_BIA_6301_HW/repo_wrk/script&quot;</code></pre>
+<pre class="r"><code>setwd(&quot;C:/Users/Esther/Documents/1_courses/2_BIA_6301_HW/repo_wrk/script&quot;)
+colon &lt;- read.csv(&quot;C:/Users/Esther/Documents/1_courses/2_BIA_6301_HW/repo_wrk/data/colon.csv&quot;)
 colon &lt;- colon[which(colon$etype == 1), ]   # Inluded recurrence data
 ##colon$rx &lt;- relevel(colon$rx, ref=&quot;Obs&quot;)</code></pre>
 </div>
